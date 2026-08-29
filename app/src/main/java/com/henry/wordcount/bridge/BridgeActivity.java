@@ -64,7 +64,10 @@ public class BridgeActivity extends Activity {
         }
 
         Toast.makeText(this, "正在上传到 WordCount 网页版…", Toast.LENGTH_SHORT).show();
-        new Thread(() -> doUpload(uri, name, intent.getType())).start();
+        final Uri upUri = uri;
+        final String upName = name;
+        final String upType = intent.getType();
+        new Thread(() -> doUpload(upUri, upName, upType)).start();
     }
 
     private String guessName(Uri uri) {
