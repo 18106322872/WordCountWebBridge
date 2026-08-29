@@ -1,0 +1,62 @@
+name: Build WordCount Web Bridge APK
+
+# 触发：打 tag `apk`（git tag apk && git push --tags）或手动触发
+on:
+  push:
+    tags: ['apk']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: 34
+          build-tools: 34.0.0
+          components: 'platform-tools'
+
+      - name: Accept SDK licenses
+        run: yes | sdkmanager --licenses || true
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.9
+          cache-disabled: true
+
+      - name: Build debug APK
+        run: |
+          gradle clean --no-daemon
+          gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Rename APK
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk "app/build/outputs/apk/debug/WordCountWebBridge.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wordcount-web-bridge-apk
+          path: app/build/outputs/apk/debug/WordCountWebBridge.apk
+
+      - name: Create Release (tag: apk)
+        uses: softprops/action-gh-release@v2
+        if: success()
+        with:
+          tag_name: apk
+          name: WordCount 网页版桥接 APK
+          make_latest: true
+          files: app/build/outputs/apk/debug/WordCountWebBridge.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

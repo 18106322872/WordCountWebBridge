@@ -1,0 +1,34 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.henry.wordcount.bridge'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.henry.wordcount.bridge"
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+        debug {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+// 不依赖任何第三方库：仅用 Android 框架自带的 HttpURLConnection / org.json
+dependencies {
+}
