@@ -51,7 +51,7 @@ jobs:
           name: wordcount-web-bridge-apk
           path: app/build/outputs/apk/debug/WordCountWebBridge.apk
 
-      - name: Create Release (tag: apk)
+      - name: "Create Release (tag: apk)"
         uses: softprops/action-gh-release@v2
         if: success()
         with:
