@@ -8,8 +8,13 @@
 3. 自动调起浏览器打开 `https://<统计网址>/?job=<任务ID>`，网页版轮询并展示统计结果
 
 ## 配置统计网址
-- 桌面上点开本 App 图标 → 设置页 → 填入统计网址（默认已填 `https://expert-cambridge-identity-walk.trycloudflare.com`，即当前 Cloudflare Quick Tunnel 地址）
-- **重要**：Cloudflare Quick Tunnel 的域名每次 PC 重启都会变。PC 重启后需进 App 设置把网址改成新的 Cloudflare 地址（双击电脑上的 `open_tunnel.vbs` 可看到最新地址），**无需重新打包**
+- 设置页默认开启 **「自动发现网址」**：App 启动/上传前会自动从 GitHub 发现通道
+  （`18106322872/WordCountWebBridge` 仓库 `tunnel-url` 分支的 `tunnel_url.txt`）拉取
+  PC 端服务实时发布的当前 Cloudflare Quick Tunnel 域名。**PC 重启换域名也能自动跟上，无需手动改**
+- PC 端 `WordCountWeb` 服务后台线程每 15s 检测 `cloudflared/tunnel.log`，域名一变就把新地址
+  PUT 到上述发现通道（需要 `cloudflared/.publish_token` 里的 GitHub Token）
+- 若发现通道不可用，App 自动回退到手动/默认地址。想完全手动控制可关掉「自动发现网址」开关，
+  自行在设置页填网址（默认 `https://expert-cambridge-identity-walk.trycloudflare.com`）
 
 ## 本地构建（可选）
 需要 Android SDK + JDK17：

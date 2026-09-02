@@ -31,11 +31,25 @@ import java.nio.charset.StandardCharsets;
  *   - 新增布局 + 进度文字提示（不再白屏转圈）
  *   - 大文件（>5MB）走分片并行上传，避免 Cloudflare 免费隧道单请求超时 524
  *   - 上传前预检服务器连通性，不可达时秒级报错而非卡死 10 分钟
+ * v1.0.50 增强：
+ *   - 自动发现当前隧道域名：启动/上传前 GET GitHub 发现通道（tunnel-url 分支
+ *     tunnel_url.txt），PC 重启换域名也自动跟上，免手动改 URL；失败回退手动/默认
+ *   - 设置页新增「自动发现网址」开关
  */
 public class BridgeActivity extends Activity {
     static final String PREFS = "wc_bridge_prefs";
     static final String KEY_URL = "server_url";
     static final String DEF_URL = "https://expert-cambridge-identity-walk.trycloudflare.com";
+
+    /**
+     * v1.0.50：自动发现通道。PC 端服务后台线程会把当前 Cloudflare Quick Tunnel 域名
+     * 写入该 GitHub raw 文件；App 启动/上传前自动拉取，PC 重启换域名也能自动跟上，
+     * 彻底免手动改 URL。拉取失败则回退到手动/默认地址。
+     */
+    static final String DISCOVERY_URL =
+            "https://raw.githubusercontent.com/18106322872/WordCountWebBridge/tunnel-url/tunnel_url.txt";
+    static final String KEY_AUTO = "auto_url";        // 是否启用自动发现（默认 true）
+    static final String KEY_LAST_AUTO = "last_auto_url"; // 上次成功发现的域名缓存
 
     /** v1.0.39：超过此阈值走分片上传（Cloudflare 免费隧道单请求 ~100s 超时） */
     static final long CHUNK_THRESHOLD = 5 * 1024 * 1024; // 5MB
@@ -115,10 +129,53 @@ public class BridgeActivity extends Activity {
         return result;
     }
 
+    // ==================== v1.0.50：自动发现当前隧道域名 ====================
+
+    /** GET 发现通道文件，提取其中的 trycloudflare.com 域名；失败返回 null */
+    private String fetchDiscoveryUrl() {
+        try {
+            URL u = new URL(DISCOVERY_URL);
+            HttpURLConnection c = (HttpURLConnection) u.openConnection();
+            c.setRequestMethod("GET");
+            c.setConnectTimeout(8000);
+            c.setReadTimeout(8000);
+            int code = c.getResponseCode();
+            if (code < 200 || code >= 300) { c.disconnect(); return null; }
+            InputStream in = c.getInputStream();
+            byte[] buf = new byte[256];
+            int n = in.read(buf);
+            c.disconnect();
+            if (n <= 0) return null;
+            String s = new String(buf, 0, n, StandardCharsets.UTF_8);
+            java.util.regex.Matcher m = java.util.regex.Pattern
+                    .compile("https://[A-Za-z0-9-]+\\.trycloudflare\\.com")
+                    .matcher(s);
+            if (m.find()) return m.group();
+        } catch (Exception ignore) { }
+        return null;
+    }
+
+    /** 解析实际使用的服务器地址：自动发现优先，失败回退手动/默认 */
+    private String resolveBaseUrl() {
+        SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
+        if (sp.getBoolean(KEY_AUTO, true)) {
+            String d = fetchDiscoveryUrl();
+            if (d != null) {
+                sp.edit().putString(KEY_LAST_AUTO, d).apply();
+                return d;
+            }
+            String last = sp.getString(KEY_LAST_AUTO, null);
+            if (last != null && !last.isEmpty()) return last;
+        }
+        String manual = sp.getString(KEY_URL, DEF_URL).trim();
+        if (manual.isEmpty()) manual = DEF_URL;
+        return manual;
+    }
+
     private void doUpload(Uri uri, String name, String mime) {
         try {
-            String base = getSharedPreferences(PREFS, MODE_PRIVATE)
-                    .getString(KEY_URL, DEF_URL).trim();
+            // v1.0.50：优先自动发现当前隧道域名，失败回退手动/默认
+            String base = resolveBaseUrl();
             if (base.endsWith("/")) base = base.substring(0, base.length() - 1);
 
             // v1.0.39：连通性预检 —— 2 秒内连不上就秒报错，不卡 10 分钟

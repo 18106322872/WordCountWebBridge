@@ -20,6 +20,13 @@
         android:textSize="13sp"
         android:layout_marginBottom="8dp" />
 
+    <CheckBox
+        android:id="@+id/cb_auto"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="自动发现网址（推荐，PC 重启免手动改）"
+        android:layout_marginBottom="8dp" />
+
     <EditText
         android:id="@+id/et_url"
         android:layout_width="match_parent"
