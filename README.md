@@ -8,8 +8,8 @@
 3. 自动调起浏览器打开 `https://<统计网址>/?job=<任务ID>`，网页版轮询并展示统计结果
 
 ## 配置统计网址
-- 桌面上点开本 App 图标 → 设置页 → 填入统计网址（默认已填 `https://7cf1f05b.r9.cpolar.cn`）
-- 万一将来 cpolar 网址变了，进设置改一下即可，**无需重新打包**
+- 桌面上点开本 App 图标 → 设置页 → 填入统计网址（默认已填 `https://expert-cambridge-identity-walk.trycloudflare.com`，即当前 Cloudflare Quick Tunnel 地址）
+- **重要**：Cloudflare Quick Tunnel 的域名每次 PC 重启都会变。PC 重启后需进 App 设置把网址改成新的 Cloudflare 地址（双击电脑上的 `open_tunnel.vbs` 可看到最新地址），**无需重新打包**
 
 ## 本地构建（可选）
 需要 Android SDK + JDK17：

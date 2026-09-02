@@ -11,13 +11,14 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 /**
- * 设置入口（桌面图标）：配置「统计网址」。默认填好当前的 cpolar 地址，
- * 万一将来网址变了，进这里改一下即可，APK 无需重新打包。
+ * 设置入口（桌面图标）：配置「统计网址」。
+ * 默认填好当前 Cloudflare Quick Tunnel 地址。
+ * **重要**：Cloudflare Quick Tunnel 域名每次 PC 重启都会变，需在此更新。
  */
 public class SettingsActivity extends Activity {
     static final String PREFS = "wc_bridge_prefs";
     static final String KEY_URL = "server_url";
-    static final String DEF_URL = "https://7cf1f05b.r9.cpolar.cn";
+    static final String DEF_URL = "https://expert-cambridge-identity-walk.trycloudflare.com";
 
     private EditText etUrl;
 
