@@ -84,47 +84,23 @@ public class SettingsActivity extends Activity {
         }
     }
 
-    // ==================== v1.0.51：强制系统浏览器打开（避开夸克/UC 的照片-only 限制）====================
+    // ==================== v1.0.53：用默认浏览器打开（用户已在系统设置中设好系统浏览器）====================
 
     /**
-     * 用系统自带浏览器打开 URL（而非夸克/UC 等第三方浏览器）。
-     * 夸克/UC 会把 &lt;input type="file"&gt; 限制为只能选照片，
-     * 导致 WordCount 网页版无法上传文件。系统浏览器支持完整文件选择。
+     * 打开 URL。v1.0.51/v1.0.52 尝试用 queryIntentActivities 检测并过滤浏览器，
+     * 但华为等 OEM 设备的系统浏览器不一定会被 ACTION_VIEW 查询返回，
+     * 导致误判"未找到系统浏览器"。
+     *
+     * v1.0.53 改为最简方案：直接 startActivity(ACTION_VIEW) 不指定包名、不用 chooser，
+     * Android 会使用用户在「设置→默认应用」中设定的默认浏览器。
+     * 用户只需在系统设置里把默认浏览器从夸克/UC 改成系统自带即可。
      */
     private void openInSystemBrowser(String url) {
-        Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-        PackageManager pm = getPackageManager();
-        List<ResolveInfo> browsers = pm.queryIntentActivities(i, 0);
-
-        // 优先级：Chrome > AOSP 原生浏览器 > 其他非夸克/UC 浏览器
-        String[] preferred = {
-                "com.android.chrome",
-                "com.google.android.apps.chrome",
-                "com.android.browser",
-                "org.chromium.chrome",
-        };
-
-        for (String pref : preferred) {
-            for (ResolveInfo info : browsers) {
-                if (pref.equals(info.activityInfo.packageName)) {
-                    i.setPackage(pref);
-                    startActivity(i);
-                    return;
-                }
-            }
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            startActivity(i);
+        } catch (Exception e) {
+            Toast.makeText(this, "无法打开浏览器：" + e.getMessage(), Toast.LENGTH_LONG).show();
         }
-
-        // 回退：任一非夸克/UC 浏览器
-        for (ResolveInfo info : browsers) {
-            String pkg = info.activityInfo.packageName.toLowerCase();
-            if (!pkg.contains("quark") && !pkg.contains("ucbrowser") && !pkg.contains("ucweb")) {
-                i.setPackage(info.activityInfo.packageName);
-                startActivity(i);
-                return;
-            }
-        }
-
-        // 兜底：让用户手动选择
-        startActivity(Intent.createChooser(i, "请选择系统浏览器打开"));
     }
 }
