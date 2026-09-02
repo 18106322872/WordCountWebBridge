@@ -28,6 +28,7 @@ public class SettingsActivity extends Activity {
 
     private EditText etUrl;
     private CheckBox cbAuto;
+    private TextView tvDef;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -36,7 +37,7 @@ public class SettingsActivity extends Activity {
 
         etUrl = findViewById(R.id.et_url);
         cbAuto = findViewById(R.id.cb_auto);
-        TextView tvDef = findViewById(R.id.tv_def);
+        tvDef = findViewById(R.id.tv_def);
 
         SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
         boolean auto = sp.getBoolean(KEY_AUTO, true);
