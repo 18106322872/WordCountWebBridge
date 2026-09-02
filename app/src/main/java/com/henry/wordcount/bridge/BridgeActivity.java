@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.content.ContentResolver;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
@@ -21,6 +23,7 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 /**
  * 桥接 Activity：从微信/千牛「用其他应用打开」被唤起时接收文件，
@@ -204,11 +207,10 @@ public class BridgeActivity extends Activity {
                 jobId = uploadSingle(base + "/api/upload", name, mime, data);
             }
 
-            // 调起浏览器打开网页版并定位到该任务
+            // 调起系统浏览器打开网页版并定位到该任务（v1.0.51：强制系统浏览器，避开夸克/UC 照片-only 限制）
             setStatus("正在跳转浏览器…");
             String target = base + "/?job=" + jobId + "&name=" + Uri.encode(name);
-            Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(target));
-            startActivity(Intent.createChooser(i, "用浏览器打开 WordCount 网页版"));
+            openInSystemBrowser(target);
             runOnUiThread(() ->
                     Toast.makeText(this, "已跳转，请在浏览器查看统计结果", Toast.LENGTH_SHORT).show());
             finish();
@@ -401,5 +403,49 @@ public class BridgeActivity extends Activity {
         if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024.0);
         if (bytes < 1024 * 1024 * 1024) return String.format("%.1f MB", bytes / (1024.0 * 1024));
         return String.format("%.1f GB", bytes / (1024.0 * 1024 * 1024));
+    }
+
+    // ==================== v1.0.51：强制系统浏览器打开（避开夸克/UC 的照片-only 限制）====================
+
+    /**
+     * 用系统自带浏览器打开 URL（而非夸克/UC 等第三方浏览器）。
+     * 夸克/UC 会把 &lt;input type="file"&gt; 限制为只能选照片，
+     * 导致 WordCount 网页版无法上传文件。系统浏览器支持完整文件选择。
+     */
+    private void openInSystemBrowser(String url) {
+        Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+        PackageManager pm = getPackageManager();
+        List<ResolveInfo> browsers = pm.queryIntentActivities(i, 0);
+
+        // 优先级：Chrome > AOSP 原生浏览器 > 其他非夸克/UC 浏览器
+        String[] preferred = {
+                "com.android.chrome",
+                "com.google.android.apps.chrome",
+                "com.android.browser",
+                "org.chromium.chrome",
+        };
+
+        for (String pref : preferred) {
+            for (ResolveInfo info : browsers) {
+                if (pref.equals(info.activityInfo.packageName)) {
+                    i.setPackage(pref);
+                    startActivity(i);
+                    return;
+                }
+            }
+        }
+
+        // 回退：任一非夸克/UC 浏览器
+        for (ResolveInfo info : browsers) {
+            String pkg = info.activityInfo.packageName.toLowerCase();
+            if (!pkg.contains("quark") && !pkg.contains("ucbrowser") && !pkg.contains("ucweb")) {
+                i.setPackage(info.activityInfo.packageName);
+                startActivity(i);
+                return;
+            }
+        }
+
+        // 兜底：让用户手动选择
+        startActivity(Intent.createChooser(i, "请选择系统浏览器打开"));
     }
 }

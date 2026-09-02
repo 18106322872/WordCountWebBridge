@@ -3,6 +3,8 @@ package com.henry.wordcount.bridge;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Bundle;
 import android.widget.Button;
@@ -10,6 +12,8 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import java.util.List;
 
 /**
  * 设置入口（桌面图标）：配置「统计网址」。
@@ -63,7 +67,7 @@ public class SettingsActivity extends Activity {
         btnOpen.setOnClickListener(v -> {
             String url = etUrl.getText().toString().trim();
             if (url.isEmpty()) url = DEF_URL;
-            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+            openInSystemBrowser(url);
         });
     }
 
@@ -78,5 +82,49 @@ public class SettingsActivity extends Activity {
         } else {
             tvDef.setText("默认：" + DEF_URL);
         }
+    }
+
+    // ==================== v1.0.51：强制系统浏览器打开（避开夸克/UC 的照片-only 限制）====================
+
+    /**
+     * 用系统自带浏览器打开 URL（而非夸克/UC 等第三方浏览器）。
+     * 夸克/UC 会把 &lt;input type="file"&gt; 限制为只能选照片，
+     * 导致 WordCount 网页版无法上传文件。系统浏览器支持完整文件选择。
+     */
+    private void openInSystemBrowser(String url) {
+        Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+        PackageManager pm = getPackageManager();
+        List<ResolveInfo> browsers = pm.queryIntentActivities(i, 0);
+
+        // 优先级：Chrome > AOSP 原生浏览器 > 其他非夸克/UC 浏览器
+        String[] preferred = {
+                "com.android.chrome",
+                "com.google.android.apps.chrome",
+                "com.android.browser",
+                "org.chromium.chrome",
+        };
+
+        for (String pref : preferred) {
+            for (ResolveInfo info : browsers) {
+                if (pref.equals(info.activityInfo.packageName)) {
+                    i.setPackage(pref);
+                    startActivity(i);
+                    return;
+                }
+            }
+        }
+
+        // 回退：任一非夸克/UC 浏览器
+        for (ResolveInfo info : browsers) {
+            String pkg = info.activityInfo.packageName.toLowerCase();
+            if (!pkg.contains("quark") && !pkg.contains("ucbrowser") && !pkg.contains("ucweb")) {
+                i.setPackage(info.activityInfo.packageName);
+                startActivity(i);
+                return;
+            }
+        }
+
+        // 兜底：让用户手动选择
+        startActivity(Intent.createChooser(i, "请选择系统浏览器打开"));
     }
 }
