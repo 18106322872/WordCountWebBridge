@@ -3,7 +3,6 @@ name: Build WordCount Web Bridge APK
 # 触发：打 tag `apk`（git tag apk && git push --tags）或手动触发
 on:
   push:
-    branches: [main]
     tags: ['apk']
   workflow_dispatch:
 
@@ -50,6 +49,11 @@ jobs:
         with:
           name: wordcount-web-bridge-apk
           path: app/build/outputs/apk/debug/WordCountWebBridge.apk
+
+      - name: Delete existing release (if any)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release delete apk --yes || true
 
       - name: "Create Release (tag: apk)"
         uses: softprops/action-gh-release@v2
