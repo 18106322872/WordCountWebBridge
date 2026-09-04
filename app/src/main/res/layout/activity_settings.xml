@@ -20,6 +20,13 @@
         android:textSize="13sp"
         android:layout_marginBottom="8dp" />
 
+    <CheckBox
+        android:id="@+id/cb_auto"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="自动发现网址（推荐，PC 重启免手动改）"
+        android:layout_marginBottom="8dp" />
+
     <EditText
         android:id="@+id/et_url"
         android:layout_width="match_parent"
@@ -36,6 +43,13 @@
         android:layout_marginTop="4dp"
         android:layout_marginBottom="20dp" />
 
+    <CheckBox
+        android:id="@+id/cb_word_verify"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Word 精确模式（默认开启：统计更准但稍慢）"
+        android:layout_marginBottom="20dp" />
+
     <Button
         android:id="@+id/btn_save"
         android:layout_width="match_parent"
@@ -46,6 +60,6 @@
         android:id="@+id/btn_open"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="打开网页版测试"
+        android:text="打开网页统计"
         android:layout_marginTop="8dp" />
 </LinearLayout>
