@@ -317,7 +317,7 @@ public class BridgeActivity extends Activity {
             NotificationChannel ch = new NotificationChannel(
                     CHANNEL_ID_COMPLETE, "统计完成", NotificationManager.IMPORTANCE_DEFAULT);
             ch.setShowBadge(false);
-            ch.description = "文件统计完成时提醒";
+            ch.setDescription("文件统计完成时提醒");
             ch.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION), null);
             nm.createNotificationChannel(ch);
         } catch (Throwable e) {
