@@ -24,15 +24,14 @@
         android:id="@+id/cb_auto"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="自动发现网址（推荐，PC 重启免手动改）"
+        android:text="自动发现网址（开启后忽略下方下拉框，用服务器发布域名）"
         android:layout_marginBottom="8dp" />
 
-    <EditText
-        android:id="@+id/et_url"
+    <Spinner
+        android:id="@+id/sp_url"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:inputType="textUri"
-        android:hint="https://..." />
+        android:layout_marginBottom="4dp" />
 
     <TextView
         android:id="@+id/tv_def"
@@ -43,11 +42,26 @@
         android:layout_marginTop="4dp"
         android:layout_marginBottom="20dp" />
 
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="frp 访问密码（可选）："
+        android:textSize="13sp"
+        android:layout_marginBottom="8dp" />
+
+    <EditText
+        android:id="@+id/et_pw"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:inputType="textPassword"
+        android:hint="frp 链接已开访问密码时填，留空则需浏览器先授权一次" />
+
     <CheckBox
         android:id="@+id/cb_word_verify"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Word 精确模式（默认开启：统计更准但稍慢）"
+        android:layout_marginTop="20dp"
         android:layout_marginBottom="20dp" />
 
     <Button

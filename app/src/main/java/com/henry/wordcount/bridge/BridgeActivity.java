@@ -20,10 +20,20 @@ import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.CookieHandler;
+import java.net.CookieManager;
+import java.net.CookiePolicy;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.cert.X509Certificate;
 import java.util.List;
+
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 /**
  * 桥接 Activity：从微信/千牛「用其他应用打开」被唤起时接收文件，
@@ -35,6 +45,10 @@ import java.util.List;
  *   - 新增布局 + 进度文字提示（不再白屏转圈）
  *   - 大文件（>5MB）走分片并行上传，避免 Cloudflare 免费隧道单请求超时 524
  *   - 上传前预检服务器连通性，不可达时秒级报错而非卡死 10 分钟
+ * v1.0.56 增强：
+ *   - 统计网址改为下拉框（frp / dpdns.org / 127.0.0.1），默认 frp
+ *   - 放行 SakuraFrp「自动 HTTPS」自签证书（否则 HttpURLConnection 直接 SSL 拒连）
+ *   - 新增可选「访问密码」：连接前自动 POST 授权并持 cookie，frp 免浏览器授权即可用
  * v1.0.50 增强：
  *   - 自动发现当前隧道域名：启动/上传前 GET GitHub 发现通道（tunnel-url 分支
  *     tunnel_url.txt），PC 重启换域名也自动跟上，免手动改 URL；失败回退手动/默认
@@ -43,7 +57,8 @@ import java.util.List;
 public class BridgeActivity extends Activity {
     static final String PREFS = "wc_bridge_prefs";
     static final String KEY_URL = "server_url";
-    static final String DEF_URL = "https://expert-cambridge-identity-walk.trycloudflare.com";
+    static final String DEF_URL = "https://dx.frp-boy.com:41086";
+    static final String KEY_ACCESS_PW = "access_pw";   // v1.0.56：frp 访问密码（留空则需在浏览器先授权）
 
     /**
      * v1.0.50：自动发现通道。PC 端服务后台线程会把当前 Cloudflare Quick Tunnel 域名
@@ -70,7 +85,58 @@ public class BridgeActivity extends Activity {
         setContentView(R.layout.activity_bridge);
         tvStatus = findViewById(R.id.tv_status);
         progressBar = findViewById(R.id.progress_bar);
+        // v1.0.56：放行 SakuraFrp 自签证书 + 启用 cookie 自动管理（访问密码授权用）
+        installRelaxedTls();
+        CookieHandler.setDefault(new CookieManager(null, CookiePolicy.ACCEPT_ALL));
         handleIntent(getIntent());
+    }
+
+    /**
+     * v1.0.56：放行自签证书。SakuraFrp「自动 HTTPS」用的是自签 CA，
+     * 系统默认校验会直接抛 SSLHandshakeException，导致 frp 链接在 App 里连不上
+     * （浏览器点「继续」能过，但 HttpURLConnection 不认）。本工具仅与自有服务器通信，
+     * 故全局放行 TLS 校验，保证 frp 链接可用。
+     */
+    private void installRelaxedTls() {
+        try {
+            TrustManager[] tm = new TrustManager[]{
+                    new X509TrustManager() {
+                        public void checkClientTrusted(X509Certificate[] chain, String authType) { }
+                        public void checkServerTrusted(X509Certificate[] chain, String authType) { }
+                        public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
+                    }
+            };
+            SSLContext ctx = SSLContext.getInstance("TLS");
+            ctx.init(null, tm, new java.security.SecureRandom());
+            HttpsURLConnection.setDefaultSSLSocketFactory(ctx.getSocketFactory());
+            HttpsURLConnection.setDefaultHostnameVerifier((hostname, session) -> true);
+        } catch (Exception ignore) { }
+    }
+
+    /**
+     * v1.0.56：若设置了 frp 访问密码，连接前先 POST 授权并持 cookie，
+     * 后续 /api/* 请求自动带上，frp 隧道免浏览器授权即可用。
+     * 文档：POST pw=<密码>&persist_auth=on 到隧道根地址即完成授权。
+     */
+    private void authenticateIfNeeded(String base) {
+        SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
+        String pw = sp.getString(KEY_ACCESS_PW, "").trim();
+        if (pw.isEmpty()) return;
+        try {
+            URL u = new URL(base + "/");
+            HttpURLConnection c = (HttpURLConnection) u.openConnection();
+            c.setRequestMethod("POST");
+            c.setDoOutput(true);
+            c.setConnectTimeout(8000);
+            c.setReadTimeout(8000);
+            c.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+            String body = "pw=" + URLEncoder.encode(pw, "UTF-8") + "&persist_auth=on";
+            try (java.io.OutputStream os = c.getOutputStream()) {
+                os.write(body.getBytes(StandardCharsets.UTF_8));
+            }
+            c.getResponseCode(); // 授权成功会 Set-Cookie，由 CookieManager 自动保存
+            c.disconnect();
+        } catch (Exception ignore) { }
     }
 
     @Override
@@ -163,7 +229,7 @@ public class BridgeActivity extends Activity {
     /** 解析实际使用的服务器地址：自动发现优先，失败回退手动/默认 */
     private String resolveBaseUrl() {
         SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
-        if (sp.getBoolean(KEY_AUTO, true)) {
+        if (sp.getBoolean(KEY_AUTO, false)) {
             String d = fetchDiscoveryUrl();
             if (d != null) {
                 sp.edit().putString(KEY_LAST_AUTO, d).apply();
@@ -183,13 +249,22 @@ public class BridgeActivity extends Activity {
             String base = resolveBaseUrl();
             if (base.endsWith("/")) base = base.substring(0, base.length() - 1);
 
+            // v1.0.56：若设置了 frp 访问密码，先 POST 授权（免浏览器手动授权）
+            authenticateIfNeeded(base);
+
             // v1.0.39：连通性预检 —— 2 秒内连不上就秒报错，不卡 10 分钟
             setStatus("正在连接服务器…");
             if (!checkReachable(base)) {
-                throw new Exception("无法连接统计服务器（" + base + "）。请检查：\n" +
-                        "① 电脑是否开机且 WordCountWeb 服务运行中\n" +
-                        "② 手机和电脑是否在同一网络（或电脑有外网穿透）\n" +
-                        "③ 进入本 App 设置页确认网址正确");
+                boolean isFrp = base.contains("frp-boy.com");
+                boolean hasPw = getSharedPreferences(PREFS, MODE_PRIVATE).getString(KEY_ACCESS_PW, "").trim().isEmpty();
+                StringBuilder sb = new StringBuilder("无法连接统计服务器（" + base + "）。请检查：\n");
+                sb.append("① 电脑是否开机且 WordCountWeb 服务运行中\n");
+                sb.append("② 手机和电脑是否在同一网络（或电脑有外网穿透）\n");
+                sb.append("③ 进入本 App 设置页确认网址正确");
+                if (isFrp && hasPw) {
+                    sb.append("\n④ 该 frp 链接已开启访问密码：请在设置页填入密码，或用手机浏览器先访问该网址授权一次");
+                }
+                throw new Exception(sb.toString());
             }
 
             InputStream is = getContentResolver().openInputStream(uri);

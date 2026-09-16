@@ -8,13 +8,17 @@
 3. 自动调起浏览器打开 `https://<统计网址>/?job=<任务ID>`，网页版轮询并展示统计结果
 
 ## 配置统计网址
-- 设置页默认开启 **「自动发现网址」**：App 启动/上传前会自动从 GitHub 发现通道
-  （`18106322872/WordCountWebBridge` 仓库 `tunnel-url` 分支的 `tunnel_url.txt`）拉取
-  PC 端服务实时发布的当前 Cloudflare Quick Tunnel 域名。**PC 重启换域名也能自动跟上，无需手动改**
+- 设置页提供 **「统计网址」下拉框**，三个选项直接选：
+  - `https://dx.frp-boy.com:41086`（默认，樱花 frp 国内中转，电信快）
+  - `https://wordcount.dpdns.org`（Cloudflare 固定域名，兜底，无需密码）
+  - `http://127.0.0.1:8000`（本机同机调试）
+  - **选哪个就用哪个，默认就是 frp**。
+- 若 frp 隧道开启了「访问密码」，在设置页 **「frp 访问密码」** 里填入，App 连接前会自动 POST
+  授权并持 cookie，之后无需再用浏览器手动授权即可上传；留空则需在手机浏览器先访问该网址授权一次。
+- 「自动发现网址」开关默认 **关闭**（让下拉框直选生效）；开启后会忽略下拉框，改为从 GitHub 发现通道
+  （`18106322872/WordCountWebBridge` 仓库 `tunnel-url` 分支的 `tunnel_url.txt`）拉取 PC 端实时发布的域名。
 - PC 端 `WordCountWeb` 服务后台线程每 15s 检测 `cloudflared/tunnel.log`，域名一变就把新地址
-  PUT 到上述发现通道（需要 `cloudflared/.publish_token` 里的 GitHub Token）
-- 若发现通道不可用，App 自动回退到手动/默认地址。想完全手动控制可关掉「自动发现网址」开关，
-  自行在设置页填网址（默认 `https://expert-cambridge-identity-walk.trycloudflare.com`）
+  PUT 到上述发现通道（需要 `cloudflared/.publish_token` 里的 GitHub Token）。
 
 ## 本地构建（可选）
 需要 Android SDK + JDK17：
