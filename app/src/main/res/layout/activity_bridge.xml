@@ -1,28 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- v1.0.39：桥接 Activity 布局 —— 上传/跳转期间显示状态，不再白屏 -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- v1.1.0：桥接 Activity 改为直接承载网页版（WebView）——
+     上传进度条、结果行、多文件累加全部由网页页面提供，App 自身不再需要状态页 -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:gravity="center"
-    android:padding="24dp"
-    android:background="#FAFAFA">
+    android:background="#FFFFFF">
 
-    <ProgressBar
-        android:id="@+id/progress_bar"
-        style="?android:attr/progressBarStyleLarge"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_marginBottom="16dp" />
+    <WebView
+        android:id="@+id/webview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
-    <TextView
-        android:id="@+id/tv_status"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="正在准备…"
-        android:textSize="15sp"
-        android:textColor="#333333"
+    <!-- 页面打不开时（电脑关机 / 网址不对 / 服务未启动）显示，避免白屏 -->
+    <LinearLayout
+        android:id="@+id/error_box"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
         android:gravity="center"
-        android:lineSpacingMultiplier="1.3" />
+        android:padding="24dp"
+        android:visibility="gone"
+        android:background="#FAFAFA">
 
-</LinearLayout>
+        <TextView
+            android:id="@+id/tv_error"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="14sp"
+            android:textColor="#333333"
+            android:lineSpacingMultiplier="1.3"
+            android:gravity="center" />
+
+        <Button
+            android:id="@+id/btn_retry"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="重试" />
+
+        <Button
+            android:id="@+id/btn_settings"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="打开设置" />
+
+    </LinearLayout>
+
+</FrameLayout>

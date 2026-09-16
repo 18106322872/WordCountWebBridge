@@ -26,10 +26,15 @@
             </intent-filter>
         </activity>
 
-        <!-- 文件接收：从微信/千牛「用其他应用打开」进来 -->
+        <!-- 文件接收：从微信/千牛「用其他应用打开」进来。
+             v1.1.0：singleTask + configChanges —— 多次分享复用同一个 Activity/WebView，
+             新文件追加到同一个网页的新行（对齐手机版程序的同页累加体验）；
+             不因横竖屏切换重建页面（否则已统计的行会丢）。 -->
         <activity
             android:name=".BridgeActivity"
             android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
             android:label="WordCount 网页版">
             <!-- 直接打开文件（VIEW）：覆盖常见文档类型 -->
             <intent-filter>
@@ -63,6 +68,12 @@
             <!-- 通过「分享」发送文件（SEND）：兜底覆盖更多场景 -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <!-- v1.1.0：多选分享（SEND_MULTIPLE）一次可追加多行 -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="*/*" />
             </intent-filter>
