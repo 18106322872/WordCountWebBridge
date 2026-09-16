@@ -1,15 +1,23 @@
 package com.henry.wordcount.bridge;
 
 import android.app.Activity;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
+import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.OpenableColumns;
 import android.view.View;
 import android.webkit.CookieManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.SslErrorHandler;
 import android.webkit.ValueCallback;
 import android.webkit.WebResourceError;
@@ -63,6 +71,12 @@ import javax.net.ssl.X509TrustManager;
  *     · 上传进度用**网页自己的进度条**显示（不再是无进度条的 App 页面）
  *     · 走浏览器 FormData 分片上传，天然没有原生 multipart 编码问题
  *
+ * v1.1.1 新增：**统计完成系统通知**。网页在「本页所有文件都统计完」时会调用
+ *   window.WCBridgeNotify.onDone()（App 通过 addJavascriptInterface 注入），
+ *   App 随即弹出与手机版程序完全同款的「WordCount 统计完成」通知
+ *   （独立通道 wordcount_complete + 系统默认提示音 + 点击回到本页）。
+ *   目的：分享大文件后切回微信/千牛，不用一直盯着页面等结果。
+ *
  * v1.0.56 保留：统计网址下拉框（frp / dpdns.org / 127.0.0.1，默认 frp）、
  *   放行 SakuraFrp「自动 HTTPS」自签证书、可选访问密码自动授权。
  * v1.0.39 保留：原生上传兜底路径（网页不可用时使用），并修复其分片 multipart
@@ -82,6 +96,13 @@ public class BridgeActivity extends Activity {
 
     /** v1.1.0：网页与 App 约定的「同源文件通道」路径前缀 */
     static final String INTERCEPT_PREFIX = "/__wcbridge__/";
+
+    /** v1.1.1：统计完成通知（与手机版 WordCount 完全同款：独立通道 + 系统默认提示音） */
+    static final String CHANNEL_ID_COMPLETE = "wordcount_complete";
+    static final int NOTI_ID_COMPLETE = 101;
+    /** 从完成通知点回来时的标记（此时没有文件，只把页面带到前台，不能 finish） */
+    static final String EXTRA_FROM_NOTIFY = "from_notify";
+    static final int REQ_NOTI_PERM = 9019;
 
     /** 原生上传兜底（网页不可用时）：超过此阈值走分片 */
     static final long CHUNK_THRESHOLD = 5 * 1024 * 1024; // 5MB
@@ -128,6 +149,10 @@ public class BridgeActivity extends Activity {
         installRelaxedTls();
         CookieHandler.setDefault(new java.net.CookieManager(null, java.net.CookiePolicy.ACCEPT_ALL));
 
+        // v1.1.1：完成通知通道 + Android 13+ 的通知权限
+        createCompletionChannel();
+        requestNotificationPermission();
+
         setupWebView();
 
         findViewById(R.id.btn_retry).setOnClickListener(v -> {
@@ -168,7 +193,10 @@ public class BridgeActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 21) {
             s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         }
-        s.setUserAgentString(s.getUserAgentString() + " WCBridge/1.1.0");
+        s.setUserAgentString(s.getUserAgentString() + " WCBridge/1.1.1");
+
+        // v1.1.1：网页统计完成时通过本接口通知 App 弹系统通知（页面里调用 window.WCBridgeNotify.onDone）
+        webView.addJavascriptInterface(new NotifyBridge(), "WCBridgeNotify");
 
         // frp 访问密码用 cookie 保持授权
         CookieManager cm = CookieManager.getInstance();
@@ -261,10 +289,122 @@ public class BridgeActivity extends Activity {
         });
     }
 
+    // ==================== v1.1.1 统计完成通知（与手机版同款）====================
+
+    /**
+     * 注入给网页的桥接口。网页在「本页所有文件都统计完」时调用 onDone(成功数, 失败数)。
+     * 注意：本方法在 WebView 的 JavaBridge 线程被调用，必须切回主线程做 UI/通知操作。
+     */
+    private class NotifyBridge {
+        @JavascriptInterface
+        public void onDone(int doneCount, int failedCount) {
+            runOnUiThread(() -> showCompletionNotification(doneCount, failedCount));
+        }
+    }
+
+    /** minSdk 21：getSystemService(Class) 是 API 23 才有的，这里统一用字符串形式取（兼容 21/22） */
+    @SuppressWarnings("deprecation")
+    private NotificationManager notiManager() {
+        return (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+    }
+
+    /** 完成通知走独立通道：默认重要性 + 系统默认提示音（与手机版 CHANNEL_ID_COMPLETE 一致） */
+    private void createCompletionChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+        try {
+            NotificationManager nm = notiManager();
+            if (nm == null) return;
+            NotificationChannel ch = new NotificationChannel(
+                    CHANNEL_ID_COMPLETE, "统计完成", NotificationManager.IMPORTANCE_DEFAULT);
+            ch.setShowBadge(false);
+            ch.description = "文件统计完成时提醒";
+            ch.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION), null);
+            nm.createNotificationChannel(ch);
+        } catch (Throwable e) {
+            // 通道创建失败不影响统计本身
+        }
+    }
+
+    /** Android 13+ 未授予 POST_NOTIFICATIONS 时通知不显示，首次进入主动申请一次 */
+    private void requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < 33) return;
+        try {
+            if (checkSelfPermission("android.permission.POST_NOTIFICATIONS")
+                    != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"},
+                        REQ_NOTI_PERM);
+            }
+        } catch (Throwable ignore) { }
+    }
+
+    /**
+     * 弹「统计完成」通知——标题/文案/图标与手机版程序保持一致：
+     *   WordCount 统计完成 / 全部文件已统计完成（有失败时附带失败个数）
+     */
+    private void showCompletionNotification(int doneCount, int failedCount) {
+        try {
+            NotificationManager nm = notiManager();
+            if (nm == null) return;
+            nm.cancel(NOTI_ID_COMPLETE);
+
+            String text = failedCount > 0
+                    ? "全部文件已统计完成（" + failedCount + " 个失败）"
+                    : "全部文件已统计完成";
+
+            Intent open = new Intent(this, BridgeActivity.class);
+            open.setAction(Intent.ACTION_MAIN);
+            open.addCategory(Intent.CATEGORY_LAUNCHER);
+            open.putExtra(EXTRA_FROM_NOTIFY, true);   // 从通知进来没有文件，只把页面带到前台
+            open.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            int piFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= 23) piFlags |= PendingIntent.FLAG_IMMUTABLE;
+            PendingIntent pi = PendingIntent.getActivity(this, 0, open, piFlags);
+
+            Notification.Builder nb = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                    ? new Notification.Builder(this, CHANNEL_ID_COMPLETE)
+                    : new Notification.Builder(this);
+            nb.setSmallIcon(android.R.drawable.stat_notify_sync)
+              .setContentTitle("WordCount 统计完成")
+              .setContentText(text)
+              .setAutoCancel(true)
+              .setPriority(Notification.PRIORITY_DEFAULT)
+              .setContentIntent(pi);
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                // O 之前没有通道，声音直接设在通知上（O+ 由通道决定）
+                nb.setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION));
+            }
+            nm.notify(NOTI_ID_COMPLETE, nb.build());
+        } catch (Throwable e) {
+            // 通知失败不能影响统计结果展示
+        }
+    }
+
+    /** 回到前台说明用户已经在看结果了，完成通知就不再需要 */
+    private void cancelCompletionNotification() {
+        try {
+            NotificationManager nm = notiManager();
+            if (nm != null) nm.cancel(NOTI_ID_COMPLETE);
+        } catch (Throwable ignore) { }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        cancelCompletionNotification();
+    }
+
     // ==================== 文件接收 ====================
 
     private void handleIntent(Intent intent) {
         if (intent == null) { finish(); return; }
+
+        // v1.1.1：从「统计完成」通知点回来（或系统以 MAIN 拉起）时没有文件，
+        //   只把页面带出来看结果，不能走下面的 finish() 逻辑
+        if (intent.getBooleanExtra(EXTRA_FROM_NOTIFY, false)
+                || Intent.ACTION_MAIN.equals(intent.getAction())) {
+            ensureLoaded();
+            return;
+        }
 
         String action = intent.getAction();
         Uri uri = null;

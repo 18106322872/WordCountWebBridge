@@ -39,6 +39,20 @@
   改为从 GitHub 发现通道（`18106322872/WordCountWebBridge` 仓库 `tunnel-url` 分支的
   `tunnel_url.txt`）拉取 PC 端实时发布的域名。
 
+## 统计完成通知（v1.1.1）
+
+分享大文件后你可以直接切回微信/千牛，**不用一直盯着页面等结果**：
+
+- 网页在「本页所有文件都统计完」时会调用 `window.WCBridgeNotify.onDone(成功数, 失败数)`
+  （App 通过 `addJavascriptInterface` 注入该接口）
+- App 随即弹出与**手机版程序完全同款**的通知：
+  - 标题 `WordCount 统计完成`，内容 `全部文件已统计完成`（有失败时附带失败个数）
+  - 独立通道「统计完成」（默认重要性 + **系统默认提示音**，可在系统设置里改）
+  - 点击通知**回到统计页面**看结果；回到前台时该通知自动清除
+- Android 13+ 需要通知权限，App 首次进入会申请一次 `POST_NOTIFICATIONS`
+
+> 在浏览器里打开网页版时没有这个接口，`wcBridgeAdd` / 通知调用都会静默跳过，互不影响。
+
 ## 本地构建（可选）
 
 需要 Android SDK + JDK17：
