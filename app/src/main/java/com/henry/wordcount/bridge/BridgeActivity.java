@@ -530,7 +530,7 @@ public class BridgeActivity extends Activity {
     }
 
     /** 稳定设备 ID（SharedPreferences 持久化），作为服务端会话 sid */
-    private String getDeviceId() {
+    private String getStableDeviceId() {
         SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
         String id = sp.getString("device_id", "");
         if (id == null || id.isEmpty()) {
@@ -567,7 +567,7 @@ public class BridgeActivity extends Activity {
         authTried = false;
         // v1.1.13：带稳定设备 sid，服务端据此在 WebView 被后台回收重载后恢复会话
         // （恢复文件行 + 已统计结果，避免刷新后只剩第一个文件）
-        webView.loadUrl(base + "/?sid=" + Uri.encode(getDeviceId()));
+        webView.loadUrl(base + "/?sid=" + Uri.encode(getStableDeviceId()));
     }
 
     private void onPageLoaded() {
