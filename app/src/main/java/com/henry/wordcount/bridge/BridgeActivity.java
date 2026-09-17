@@ -37,6 +37,9 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.net.CookieHandler;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -48,6 +51,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -108,6 +112,9 @@ public class BridgeActivity extends Activity {
     static final long CHUNK_THRESHOLD = 5 * 1024 * 1024; // 5MB
     static final int CHUNK_SIZE = 6 * 1024 * 1024;       // 每片 6MB
     static final int CONCURRENCY = 4;
+
+    /** v1.1.13：持久化文件清单文件名（应用私有数据目录），WebView 被后台回收重建时据此重新投喂全部文件 */
+    static final String SESSION_FILE = "wc_bridge_session.json";
 
     private WebView webView;
     private View errorBox;
@@ -300,6 +307,12 @@ public class BridgeActivity extends Activity {
         public void onDone(int doneCount, int failedCount) {
             runOnUiThread(() -> showCompletionNotification(doneCount, failedCount));
         }
+
+        /** v1.1.13：网页点「清空」时同步清空持久化文件清单，避免下次重建把已清空的旧文件又投喂回来 */
+        @JavascriptInterface
+        public void clearSession() {
+            runOnUiThread(() -> clearSessionFile());
+        }
     }
 
     /** minSdk 21：getSystemService(Class) 是 API 23 才有的，这里统一用字符串形式取（兼容 21/22） */
@@ -398,10 +411,14 @@ public class BridgeActivity extends Activity {
     private void handleIntent(Intent intent) {
         if (intent == null) { finish(); return; }
 
-        // v1.1.1：从「统计完成」通知点回来（或系统以 MAIN 拉起）时没有文件，
-        //   只把页面带出来看结果，不能走下面的 finish() 逻辑
-        if (intent.getBooleanExtra(EXTRA_FROM_NOTIFY, false)
-                || Intent.ACTION_MAIN.equals(intent.getAction())) {
+        // v1.1.13：从「统计完成」通知点回来 → 恢复已有会话（不投喂新文件）
+        if (intent.getBooleanExtra(EXTRA_FROM_NOTIFY, false)) {
+            resumeSession();
+            return;
+        }
+        // v1.1.13：系统以 MAIN 拉起（点图标 / 通知外入口）→ 清空旧清单，开始全新会话
+        if (Intent.ACTION_MAIN.equals(intent.getAction())) {
+            clearSessionFile();
             ensureLoaded();
             return;
         }
@@ -409,7 +426,6 @@ public class BridgeActivity extends Activity {
         String action = intent.getAction();
         Uri uri = null;
         String name = "共享文件";
-        String mime = intent.getType();
 
         if (Intent.ACTION_VIEW.equals(action)) {
             uri = intent.getData();
@@ -418,11 +434,11 @@ public class BridgeActivity extends Activity {
             Uri stream = intent.getParcelableExtra(Intent.EXTRA_STREAM);
             if (stream != null) { uri = stream; name = guessName(stream); }
         } else if (Intent.ACTION_SEND_MULTIPLE.equals(action)) {
-            // 多选分享：多个文件一次性追加多行
+            // 多选分享：持久化每个文件后再恢复会话（一次性全部投喂）
             ArrayList<Uri> list = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
             if (list != null && !list.isEmpty()) {
-                for (Uri u2 : list) enqueue(u2, guessName(u2), mime);
-                ensureLoaded();
+                for (Uri u2 : list) persistSessionFile(u2, guessName(u2));
+                resumeSession();
                 return;
             }
         }
@@ -433,8 +449,9 @@ public class BridgeActivity extends Activity {
             finish();
             return;
         }
-        enqueue(uri, name, mime);
-        ensureLoaded();
+        // v1.1.13：单文件也先持久化，再恢复会话（保证回收重建后所有文件都还在）
+        persistSessionFile(uri, name);
+        resumeSession();
     }
 
     private void enqueue(Uri uri, String name, String mime) {
@@ -442,6 +459,87 @@ public class BridgeActivity extends Activity {
     }
 
     /** 保证 WebView 已加载目标页面；已就绪则立刻投递待处理文件 */
+    // ==================== v1.1.13 会话持久化 ====================
+    // WebView 在后台可能被系统回收（即便 App 已锁定后台），重建后页面重载、所有统计状态丢失。
+    // 故把「本次要统计的文件清单」持久化到磁盘：重建时由 resumeSession 重新投喂全部文件，
+    // 网页再按 sid 从服务端恢复已统计结果与进度，避免「只剩第一个文件且重新统计」。
+
+    /** 持久化一个文件 URI 到会话清单（按 uri 去重），供后台回收重建后恢复 */
+    private void persistSessionFile(Uri uri, String name) {
+        if (uri == null) return;
+        ArrayList<Uri> list = readSessionFile();
+        if (list == null) list = new ArrayList<>();
+        for (Uri e : list) {
+            if (e != null && e.toString().equals(uri.toString())) return; // 已存在，跳过
+        }
+        list.add(uri);
+        writeSessionFile(list);
+    }
+
+    /** 清空持久化会话清单（网页点「清空」或图标冷启动时调用） */
+    private void clearSessionFile() {
+        try {
+            File f = new File(getFilesDir(), SESSION_FILE);
+            if (f.exists()) f.delete();
+        } catch (Throwable ignore) { }
+    }
+
+    /** 读取持久化会话清单，无文件或损坏时返回 null */
+    private ArrayList<Uri> readSessionFile() {
+        try {
+            File f = new File(getFilesDir(), SESSION_FILE);
+            if (!f.exists()) return null;
+            FileInputStream in = new FileInputStream(f);
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
+            in.close();
+            JSONArray arr = new JSONArray(new String(bos.toByteArray(), StandardCharsets.UTF_8));
+            ArrayList<Uri> out = new ArrayList<>();
+            for (int i = 0; i < arr.length(); i++) {
+                String s = arr.optString(i);
+                if (!s.isEmpty()) out.add(Uri.parse(s));
+            }
+            return out;
+        } catch (Throwable ignore) { }
+        return null;
+    }
+
+    /** 写入持久化会话清单 */
+    private void writeSessionFile(ArrayList<Uri> list) {
+        try {
+            JSONArray arr = new JSONArray();
+            for (Uri u : list) arr.put(u.toString());
+            File f = new File(getFilesDir(), SESSION_FILE);
+            FileOutputStream out = new FileOutputStream(f);
+            out.write(arr.toString().getBytes(StandardCharsets.UTF_8));
+            out.close();
+        } catch (Throwable ignore) { }
+    }
+
+    /** 恢复会话：把持久化清单里的全部文件投喂给网页，并加载页面 */
+    private void resumeSession() {
+        ArrayList<Uri> uris = readSessionFile();
+        if (uris != null) {
+            for (Uri u : uris) {
+                if (u != null) enqueue(u, guessName(u), null);
+            }
+        }
+        ensureLoaded();
+    }
+
+    /** 稳定设备 ID（SharedPreferences 持久化），作为服务端会话 sid */
+    private String getDeviceId() {
+        SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
+        String id = sp.getString("device_id", "");
+        if (id == null || id.isEmpty()) {
+            id = "dev_" + UUID.randomUUID().toString();
+            sp.edit().putString("device_id", id).apply();
+        }
+        return id;
+    }
+
     private void ensureLoaded() {
         new Thread(() -> {
             String base = resolveBaseUrl();
@@ -467,8 +565,9 @@ public class BridgeActivity extends Activity {
     private void loadBase(String base) {
         loadedBase = base;
         authTried = false;
-        // 页面内部把相对路径解析到这个 base
-        webView.loadUrl(base + "/");
+        // v1.1.13：带稳定设备 sid，服务端据此在 WebView 被后台回收重载后恢复会话
+        // （恢复文件行 + 已统计结果，避免刷新后只剩第一个文件）
+        webView.loadUrl(base + "/?sid=" + Uri.encode(getDeviceId()));
     }
 
     private void onPageLoaded() {
