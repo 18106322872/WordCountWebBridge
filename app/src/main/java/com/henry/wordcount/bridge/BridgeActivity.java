@@ -8,6 +8,7 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.media.RingtoneManager;
@@ -164,6 +165,12 @@ public class BridgeActivity extends Activity {
         requestNotificationPermission();
 
         setupWebView();
+
+        // v1.1.5：底部显示已安装版本号，方便确认（重装多次后易混淆）
+        try {
+            PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
+            ((TextView) findViewById(R.id.tv_version)).setText("WordCount 桥接器 v" + pi.versionName);
+        } catch (Exception ignore) { }
 
         findViewById(R.id.btn_retry).setOnClickListener(v -> {
             pageReady = false;
@@ -1116,6 +1123,21 @@ public class BridgeActivity extends Activity {
         try {
             startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
         } catch (Exception ignore) { }
+    }
+
+    /* v1.1.5：桥接器退出时显式让页面把所有正在统计的任务上报 abandon。
+       页面自身的 pagehide 在 WebView 被销毁时不一定可靠触发，这里作为可靠兜底；
+       服务端在 ABANDON_GRACE(60s) 宽限后停止统计并释放 CPU。
+       注意：仅在 Activity 真正销毁（用户关闭 / 系统回收）时触发 —— 切后台走
+       onPause/onStop，不会走 onDestroy，因此后台统计不受影响（保留救援窗口）。 */
+    @Override
+    protected void onDestroy() {
+        try {
+            if (webView != null) {
+                webView.evaluateJavascript("if(window.wcAbandonAll)window.wcAbandonAll();", null);
+            }
+        } catch (Exception ignore) { }
+        super.onDestroy();
     }
 
     @Override
