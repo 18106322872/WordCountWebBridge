@@ -11,7 +11,17 @@
         android:text="WordCount 网页版 · 桥接设置"
         android:textSize="18sp"
         android:textStyle="bold"
-        android:layout_marginBottom="16dp" />
+        android:layout_marginBottom="4dp" />
+
+    <!-- v1.1.6：版本号（设置页可见、不透明常规文字） -->
+    <TextView
+        android:id="@+id/tv_version"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="13sp"
+        android:textColor="#666666"
+        android:layout_marginBottom="16dp"
+        android:text="版本" />
 
     <TextView
         android:layout_width="wrap_content"

@@ -47,16 +47,6 @@
 
     </LinearLayout>
 
-    <!-- v1.1.5：底部小号版本号，方便确认已安装的桥接器版本 -->
-    <TextView
-        android:id="@+id/tv_version"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|start"
-        android:layout_marginStart="6dp"
-        android:layout_marginBottom="4dp"
-        android:textSize="10sp"
-        android:textColor="#88000000"
-        android:text="v?" />
+    <!-- v1.1.6：半透明版本悬浮已移除（用户反馈看不清）；版本号改在设置页标题下显示 -->
 
 </FrameLayout>

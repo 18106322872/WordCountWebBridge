@@ -53,6 +53,13 @@ public class SettingsActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_settings);
 
+        // v1.1.6：标题下显示版本号（不透明常规文字，重装多次后易混淆）
+        try {
+            android.content.pm.PackageInfo pi =
+                    getPackageManager().getPackageInfo(getPackageName(), 0);
+            ((TextView) findViewById(R.id.tv_version)).setText("版本 v" + pi.versionName);
+        } catch (Exception ignore) { }
+
         spUrl = findViewById(R.id.sp_url);
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
                 android.R.layout.simple_spinner_item, URL_OPTIONS);

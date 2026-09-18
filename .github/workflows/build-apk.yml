@@ -40,14 +40,18 @@ jobs:
           gradle clean --no-daemon
           gradle assembleDebug --no-daemon --stacktrace
 
-      - name: Rename APK
+      - name: Rename APK (with version)
+        id: apkver
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk "app/build/outputs/apk/debug/WordCountWebBridge.apk"
+          VER=$(grep -oP 'versionName\s+"\K[0-9.]+' app/build.gradle | head -1)
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          cp app/build/outputs/apk/debug/app-debug.apk "app/build/outputs/apk/debug/WordCountWebBridge-v${VER}.apk"
+          echo "APK file: WordCountWebBridge-v${VER}.apk"
 
       - uses: actions/upload-artifact@v4
         with:
           name: wordcount-web-bridge-apk
-          path: app/build/outputs/apk/debug/WordCountWebBridge.apk
+          path: app/build/outputs/apk/debug/WordCountWebBridge-v${{ steps.apkver.outputs.version }}.apk
 
       - name: Delete existing release (if any)
         env:
@@ -61,6 +65,6 @@ jobs:
           tag_name: apk
           name: WordCount 网页版桥接 APK
           make_latest: true
-          files: app/build/outputs/apk/debug/WordCountWebBridge.apk
+          files: app/build/outputs/apk/debug/WordCountWebBridge-v${{ steps.apkver.outputs.version }}.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

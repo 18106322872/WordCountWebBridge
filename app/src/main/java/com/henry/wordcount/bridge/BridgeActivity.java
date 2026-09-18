@@ -8,7 +8,6 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.media.RingtoneManager;
@@ -166,11 +165,7 @@ public class BridgeActivity extends Activity {
 
         setupWebView();
 
-        // v1.1.5：底部显示已安装版本号，方便确认（重装多次后易混淆）
-        try {
-            PackageInfo pi = getPackageManager().getPackageInfo(getPackageName(), 0);
-            ((TextView) findViewById(R.id.tv_version)).setText("WordCount 桥接器 v" + pi.versionName);
-        } catch (Exception ignore) { }
+        // v1.1.6：版本号改在设置页标题下显示（此页不再显示半透明悬浮）
 
         findViewById(R.id.btn_retry).setOnClickListener(v -> {
             pageReady = false;
