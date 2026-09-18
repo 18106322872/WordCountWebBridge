@@ -15,6 +15,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.OpenableColumns;
+import android.util.Log;
 import android.view.View;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
@@ -115,6 +116,8 @@ public class BridgeActivity extends Activity {
 
     /** v1.1.13：持久化文件清单文件名（应用私有数据目录），WebView 被后台回收重建时据此重新投喂全部文件 */
     static final String SESSION_FILE = "wc_bridge_session.json";
+    /** v1.1.3：距上次分享超过此时长 → 视为新的一轮（清单重置，不再累积旧文件） */
+    static final long SESSION_ROUND_GAP_MS = 10 * 60 * 1000L;
 
     private WebView webView;
     private View errorBox;
@@ -305,7 +308,12 @@ public class BridgeActivity extends Activity {
     private class NotifyBridge {
         @JavascriptInterface
         public void onDone(int doneCount, int failedCount) {
-            runOnUiThread(() -> showCompletionNotification(doneCount, failedCount));
+            runOnUiThread(() -> {
+                showCompletionNotification(doneCount, failedCount);
+                // v1.1.3：本轮全部统计成功 → 清单清空，下次「用其他应用打开」直接是新一轮，
+                //          不会再把这批旧文件重投一遍（有失败则保留，方便用户重试/继续加文件）
+                if (failedCount == 0) clearSessionFile();
+            });
         }
 
         /** v1.1.13：网页点「清空」时同步清空持久化文件清单，避免下次重建把已清空的旧文件又投喂回来 */
@@ -469,9 +477,19 @@ public class BridgeActivity extends Activity {
         if (uri == null) return;
         ArrayList<Uri> list = readSessionFile();
         if (list == null) list = new ArrayList<>();
+        // v1.1.3：跨轮次不再累积 —— 距上次分享超过 10 分钟就认为用户开始了新一轮，
+        //          把上一轮的清单清掉（否则新的一轮里会冒出历史文件，用户看到的
+        //          「只加了 1 个却出现 5 行」就是这么来的）
+        long lastAt = readSessionAt();
+        if (lastAt > 0 && System.currentTimeMillis() - lastAt > SESSION_ROUND_GAP_MS) {
+            list.clear();
+        }
+        // v1.1.3：剔除系统已回收授权的失效 URI（投给网页只会变成一行行失败）
+        list = pruneUnreadable(list, "share");
         for (Uri e : list) {
             if (e != null && e.toString().equals(uri.toString())) return; // 已存在，跳过
         }
+        takePersistableRead(uri);
         list.add(uri);
         writeSessionFile(list);
     }
@@ -495,11 +513,19 @@ public class BridgeActivity extends Activity {
             int n;
             while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
             in.close();
-            JSONArray arr = new JSONArray(new String(bos.toByteArray(), StandardCharsets.UTF_8));
+            String raw = new String(bos.toByteArray(), StandardCharsets.UTF_8).trim();
+            JSONArray arr;
+            if (raw.startsWith("{")) {
+                arr = new JSONObject(raw).optJSONArray("uris");   // v1.1.3 新格式
+            } else {
+                arr = new JSONArray(raw);                         // 旧格式：纯数组
+            }
             ArrayList<Uri> out = new ArrayList<>();
-            for (int i = 0; i < arr.length(); i++) {
-                String s = arr.optString(i);
-                if (!s.isEmpty()) out.add(Uri.parse(s));
+            if (arr != null) {
+                for (int i = 0; i < arr.length(); i++) {
+                    String s = arr.optString(i);
+                    if (!s.isEmpty()) out.add(Uri.parse(s));
+                }
             }
             return out;
         } catch (Throwable ignore) { }
@@ -511,16 +537,70 @@ public class BridgeActivity extends Activity {
         try {
             JSONArray arr = new JSONArray();
             for (Uri u : list) arr.put(u.toString());
+            JSONObject root = new JSONObject();      // v1.1.3：带「最近一次分享时间」
+            root.put("at", System.currentTimeMillis());
+            root.put("uris", arr);
             File f = new File(getFilesDir(), SESSION_FILE);
             FileOutputStream out = new FileOutputStream(f);
-            out.write(arr.toString().getBytes(StandardCharsets.UTF_8));
+            out.write(root.toString().getBytes(StandardCharsets.UTF_8));
             out.close();
+        } catch (Throwable ignore) { }
+    }
+
+    /** v1.1.3：读取「最近一次分享时间」，用于判定是否新一轮（旧格式返回 0） */
+    private long readSessionAt() {
+        try {
+            File f = new File(getFilesDir(), SESSION_FILE);
+            if (!f.exists()) return 0L;
+            FileInputStream in = new FileInputStream(f);
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
+            in.close();
+            String raw = new String(bos.toByteArray(), StandardCharsets.UTF_8).trim();
+            if (raw.startsWith("{")) return new JSONObject(raw).optLong("at", 0L);
+        } catch (Throwable ignore) { }
+        return 0L;
+    }
+
+    /** v1.1.3：该 URI 现在还能读吗（授权是否还有效） */
+    private boolean canRead(Uri uri) {
+        if (uri == null) return false;
+        try {
+            InputStream in = getContentResolver().openInputStream(uri);
+            if (in == null) return false;
+            in.close();
+            return true;
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    /** v1.1.3：剔除已失效（授权被系统回收）的 URI，避免投给网页变成失败行 */
+    private ArrayList<Uri> pruneUnreadable(ArrayList<Uri> list, String why) {
+        if (list == null) return null;
+        ArrayList<Uri> ok = new ArrayList<>();
+        for (Uri u : list) {
+            if (canRead(u)) ok.add(u);
+        }
+        if (ok.size() != list.size()) {
+            Log.w("WCBridge", "prune " + (list.size() - ok.size()) + " unreadable uri(s) [" + why + "]");
+        }
+        return ok;
+    }
+
+    /** v1.1.3：尽力申请持久化读授权（provider 不支持时静默失败，不影响流程） */
+    private void takePersistableRead(Uri uri) {
+        try {
+            getContentResolver().takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
         } catch (Throwable ignore) { }
     }
 
     /** 恢复会话：把持久化清单里的全部文件投喂给网页，并加载页面 */
     private void resumeSession() {
-        ArrayList<Uri> uris = readSessionFile();
+        ArrayList<Uri> uris = pruneUnreadable(readSessionFile(), "resume");   // v1.1.3
         if (uris != null) {
             for (Uri u : uris) {
                 if (u != null) enqueue(u, guessName(u), null);
@@ -785,7 +865,13 @@ public class BridgeActivity extends Activity {
             }
             if (result == null || "共享文件".equals(result)) {
                 String p = uri.getLastPathSegment();
-                if (p != null) result = p;
+                // v1.1.3：拿不到显示名时用唯一后缀，避免多个文件都叫「共享文件」
+                //          被网页按文件名去重、合并成一行
+                if (p != null && !p.isEmpty()) {
+                    result = p;
+                } else {
+                    result = "共享文件_" + (System.currentTimeMillis() % 1000000);
+                }
             }
         } catch (Exception ignore) { }
         return result;
