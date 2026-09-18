@@ -21,6 +21,7 @@ import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.SslErrorHandler;
 import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -109,6 +110,10 @@ public class BridgeActivity extends Activity {
     static final String EXTRA_FROM_NOTIFY = "from_notify";
     static final int REQ_NOTI_PERM = 9019;
 
+    /** v1.1.8：网页 <input type=file> 的系统文件选择器回调（缺它则「选择文件」点了没反应） */
+    static final int REQ_FILE_CHOOSER = 9020;
+    private ValueCallback<Uri[]> filePathCallback;
+
     /** 原生上传兜底（网页不可用时）：超过此阈值走分片 */
     static final long CHUNK_THRESHOLD = 5 * 1024 * 1024; // 5MB
     static final int CHUNK_SIZE = 6 * 1024 * 1024;       // 每片 6MB
@@ -142,8 +147,10 @@ public class BridgeActivity extends Activity {
         final Uri uri;
         final String name;
         final String mime;
-        PendingFile(Uri uri, String name, String mime) {
-            this.uri = uri; this.name = name; this.mime = mime;
+        final boolean fromResume;   // v1.1.8：true=清单恢复重投（网页可拒收已删文件），false=用户新分享
+        PendingFile(Uri uri, String name, String mime) { this(uri, name, mime, false); }
+        PendingFile(Uri uri, String name, String mime, boolean fromResume) {
+            this.uri = uri; this.name = name; this.mime = mime; this.fromResume = fromResume;
         }
     }
 
@@ -280,6 +287,28 @@ public class BridgeActivity extends Activity {
                         return null;
                     }
                 }
+            }
+        });
+
+        /* v1.1.8：网页的「选择文件」按钮（<input type=file>）必须由 WebChromeClient
+           接管才能弹出系统文件选择器——此前从未设置 WebChromeClient，点了永远没反应。 */
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(WebView wv, ValueCallback<Uri[]> callback,
+                                             FileChooserParams params) {
+                if (filePathCallback != null) {
+                    try { filePathCallback.onReceiveValue(null); } catch (Throwable ignore) { }
+                }
+                filePathCallback = callback;
+                try {
+                    Intent intent = params.createIntent();
+                    startActivityForResult(intent, REQ_FILE_CHOOSER);
+                } catch (Throwable e) {
+                    filePathCallback = null;
+                    Toast.makeText(BridgeActivity.this, "无法打开文件选择器", Toast.LENGTH_SHORT).show();
+                    return false;
+                }
+                return true;
             }
         });
     }
@@ -489,6 +518,11 @@ public class BridgeActivity extends Activity {
         pending.add(new PendingFile(uri, name, mime));
     }
 
+    /** v1.1.8：清单恢复重投专用 enqueue（带 fromResume 标记，网页据此拒收已删文件） */
+    private void enqueueResume(Uri uri, String name) {
+        pending.add(new PendingFile(uri, name, null, true));
+    }
+
     /** 保证 WebView 已加载目标页面；已就绪则立刻投递待处理文件 */
     // ==================== v1.1.13 会话持久化 ====================
     // WebView 在后台可能被系统回收（即便 App 已锁定后台），重建后页面重载、所有统计状态丢失。
@@ -631,7 +665,7 @@ public class BridgeActivity extends Activity {
             // 页面重载后的续跑由服务端 /api/session/{sid} 负责，不再依赖桥接清单重投。
             clearSessionFile();
             for (Uri u : uris) {
-                if (u != null) enqueue(u, guessName(u), null);
+                if (u != null) enqueueResume(u, guessName(u));   // v1.1.8：带 resume 标记
             }
         }
         ensureLoaded();
@@ -739,8 +773,10 @@ public class BridgeActivity extends Activity {
             String token = "t" + tokenSeq.incrementAndGet() + "_" + System.currentTimeMillis();
             tokenFiles.put(token, new FileRef(f.uri, f.name));
             String path = INTERCEPT_PREFIX + token;
+            // v1.1.8：第三个参数告诉网页本次是否为「恢复重投」——网页对用户已删除过的
+            // 文件名会拒收并让我们从清单移除，鬼影行从此不可能复活（哪怕清单残留）。
             String js = "window.wcBridgeAdd(" + JSONObject.quote(f.name) + ","
-                    + JSONObject.quote(path) + ");";
+                    + JSONObject.quote(path) + "," + f.fromResume + ");";
             webView.evaluateJavascript(js, null);
             // v1.1.7：投喂即消费 —— 该 URI 已交给页面，从持久化清单移除，防重载后复活
             removeFromSessionFile(f.uri);
@@ -1177,6 +1213,29 @@ public class BridgeActivity extends Activity {
             }
         } catch (Exception ignore) { }
         super.onDestroy();
+    }
+
+    /** v1.1.8：把系统文件选择器的结果回传给网页（支持多选） */
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQ_FILE_CHOOSER) {
+            Uri[] results = null;
+            if (resultCode == RESULT_OK && data != null) {
+                if (data.getClipData() != null) {
+                    int n = data.getClipData().getItemCount();
+                    results = new Uri[n];
+                    for (int i = 0; i < n; i++) results[i] = data.getClipData().getItemAt(i).getUri();
+                } else if (data.getData() != null) {
+                    results = new Uri[]{ data.getData() };
+                }
+            }
+            if (filePathCallback != null) {
+                try { filePathCallback.onReceiveValue(results); } catch (Throwable ignore) { }
+                filePathCallback = null;
+            }
+            return;
+        }
+        super.onActivityResult(requestCode, resultCode, data);
     }
 
     @Override
