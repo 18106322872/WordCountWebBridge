@@ -323,6 +323,27 @@ public class BridgeActivity extends Activity {
         public void clearSession() {
             runOnUiThread(() -> clearSessionFile());
         }
+
+        /** v1.1.7：网页删除某行时，把同名文件从持久化清单移除。
+         *  否则清单里的旧 URI 会随每次页面加载被 resumeSession 反复重投——
+         *  用户删掉的压缩包重载后又冒出「等待统计」鬼影行（实测反馈）。 */
+        @JavascriptInterface
+        public void removeFromSession(String name) {
+            if (name == null || name.isEmpty()) return;
+            runOnUiThread(() -> {
+                try {
+                    ArrayList<Uri> list = readSessionFile();
+                    if (list == null || list.isEmpty()) return;
+                    ArrayList<Uri> keep = new ArrayList<>();
+                    boolean changed = false;
+                    for (Uri u : list) {
+                        if (u != null && name.equals(guessName(u))) { changed = true; continue; }
+                        keep.add(u);
+                    }
+                    if (changed) writeSessionFile(keep);
+                } catch (Throwable ignore) { }
+            });
+        }
     }
 
     /** minSdk 21：getSystemService(Class) 是 API 23 才有的，这里统一用字符串形式取（兼容 21/22） */
@@ -604,6 +625,11 @@ public class BridgeActivity extends Activity {
     private void resumeSession() {
         ArrayList<Uri> uris = pruneUnreadable(readSessionFile(), "resume");   // v1.1.3
         if (uris != null) {
+            // v1.1.7：投喂即消费 —— 清单读完立刻清空。
+            // 旧逻辑把 URI 留在清单里等「整轮全部成功」才清，一旦用户中途删行/放弃，
+            // 旧 URI 就永远残留，此后每次页面加载都被重投一遍 = 已删文件复活成鬼影行。
+            // 页面重载后的续跑由服务端 /api/session/{sid} 负责，不再依赖桥接清单重投。
+            clearSessionFile();
             for (Uri u : uris) {
                 if (u != null) enqueue(u, guessName(u), null);
             }
@@ -716,7 +742,25 @@ public class BridgeActivity extends Activity {
             String js = "window.wcBridgeAdd(" + JSONObject.quote(f.name) + ","
                     + JSONObject.quote(path) + ");";
             webView.evaluateJavascript(js, null);
+            // v1.1.7：投喂即消费 —— 该 URI 已交给页面，从持久化清单移除，防重载后复活
+            removeFromSessionFile(f.uri);
         }
+    }
+
+    /** v1.1.7：从持久化清单移除单个 URI（minSdk 21，不用 removeIf） */
+    private void removeFromSessionFile(Uri uri) {
+        if (uri == null) return;
+        try {
+            ArrayList<Uri> list = readSessionFile();
+            if (list == null || list.isEmpty()) return;
+            ArrayList<Uri> keep = new ArrayList<>();
+            boolean changed = false;
+            for (Uri u : list) {
+                if (u != null && u.toString().equals(uri.toString())) { changed = true; continue; }
+                keep.add(u);
+            }
+            if (changed) writeSessionFile(keep);
+        } catch (Throwable ignore) { }
     }
 
     // ==================== 设置读取 ====================
