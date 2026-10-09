@@ -14,6 +14,7 @@ import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.OpenableColumns;
 import android.util.Log;
 import android.view.View;
@@ -371,6 +372,50 @@ public class BridgeActivity extends Activity {
                     }
                     if (changed) writeSessionFile(keep);
                 } catch (Throwable ignore) { }
+            });
+        }
+
+        /** v1.1.9：网页导出的 PDF 保存到手机。
+         *  背景：WebView 没有 DownloadListener，网页的 blob:+a.click() 下载被静默丢弃
+         *  （实测「导出中…」转一圈恢复，什么都没发生）。网页端 v1.3.9 起在检测到本接口时
+         *  改走 saveFile(文件名, base64)，App 落盘后 toast 提示位置。
+         *  Android 10+ 走 MediaStore.Downloads（无需存储权限）；旧版本落到应用专属
+         *  外部目录 Download/（同样免权限），toast 里带完整路径。 */
+        @JavascriptInterface
+        public void saveFile(String name, String base64) {
+            if (name == null || name.isEmpty() || base64 == null || base64.isEmpty()) return;
+            runOnUiThread(() -> {
+                String where;
+                try {
+                    byte[] data = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
+                    String safeName = name.replaceAll("[\\\\/:*?\"<>|]", "_");
+                    if (Build.VERSION.SDK_INT >= 29) {
+                        android.content.ContentValues cv = new android.content.ContentValues();
+                        cv.put(android.provider.MediaStore.Downloads.DISPLAY_NAME, safeName);
+                        cv.put(android.provider.MediaStore.Downloads.MIME_TYPE, "application/pdf");
+                        Uri uri = getContentResolver().insert(
+                                android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
+                        if (uri == null) throw new IllegalStateException("系统拒绝创建下载条目");
+                        OutputStream os = getContentResolver().openOutputStream(uri);
+                        if (os == null) throw new IllegalStateException("下载条目不可写");
+                        os.write(data);
+                        os.flush();
+                        os.close();
+                        where = "下载/" + safeName;
+                    } else {
+                        File dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+                        if (dir == null) dir = getFilesDir();
+                        File f = new File(dir, safeName);
+                        FileOutputStream fos = new FileOutputStream(f);
+                        fos.write(data);
+                        fos.flush();
+                        fos.close();
+                        where = f.getAbsolutePath();
+                    }
+                    Toast.makeText(BridgeActivity.this, "已导出：" + where, Toast.LENGTH_LONG).show();
+                } catch (Throwable t) {
+                    Toast.makeText(BridgeActivity.this, "导出保存失败：" + t.getMessage(), Toast.LENGTH_LONG).show();
+                }
             });
         }
     }
