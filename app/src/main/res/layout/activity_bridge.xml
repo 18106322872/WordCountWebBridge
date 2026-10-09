@@ -57,10 +57,11 @@
         android:layout_gravity="bottom|end"
         android:layout_margin="16dp"
         android:minWidth="0dp"
-        android:paddingStart="18dp"
-        android:paddingEnd="18dp"
+        android:minHeight="0dp"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp"
         android:text="查看已导出文件"
-        android:textSize="14sp"
+        android:textSize="13sp"
         android:textColor="@color/brand"
         android:background="@drawable/btn_blue_border" />
 

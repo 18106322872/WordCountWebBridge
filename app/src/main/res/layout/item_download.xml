@@ -44,8 +44,10 @@
             android:textSize="13sp"
             android:textColor="@color/brand"
             android:background="@drawable/btn_blue_border"
-            android:paddingStart="14dp"
-            android:paddingEnd="14dp" />
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="6dp" />
 
         <Button
             android:id="@+id/btn_del"
@@ -55,8 +57,10 @@
             android:textSize="13sp"
             android:textColor="@color/brand"
             android:background="@drawable/btn_blue_border"
-            android:paddingStart="14dp"
-            android:paddingEnd="14dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="6dp"
             android:layout_marginStart="8dp" />
 
     </LinearLayout>
