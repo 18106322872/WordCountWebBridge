@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.1.11：蓝色边框按钮背景（与网页版品牌蓝 #2b6cff 一致：白底 + 蓝字 + 蓝边）。
+     按下时淡蓝底，松开恢复白底，提供点击反馈。 -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#e8f0fe" />
+            <stroke android:width="1.5dp" android:color="@color/brand" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/white" />
+            <stroke android:width="1.5dp" android:color="@color/brand" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+</selector>

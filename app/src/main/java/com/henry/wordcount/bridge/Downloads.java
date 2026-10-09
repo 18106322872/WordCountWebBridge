@@ -19,12 +19,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 
 /**
- * v1.1.10：桥接导出的 PDF 下载清单（类似手机浏览器的「下载」管理页）。
+ * v1.1.10：桥接导出的 PDF 清单（App 内叫「查看已导出文件」，类似手机浏览器的下载管理页）。
  *
  * 背景：此前网页通过 saveFile 把 PDF 存到系统下载目录后只弹 toast，用户必须自己进
  * 「文件管理」才能看，很不方便。现做两件事：
  *   1) 导出完成后把条目登记到本清单，并尽量自动打开（见 BridgeActivity.saveFile）。
- *   2) 提供 DownloadsActivity 列表，用户可在 App 内直接「查看 / 删除」下载的文件，
+ *   2) 提供 DownloadsActivity 列表，用户可在 App 内直接「打开 / 删除」导出的文件，
  *      不必切到系统文件管理器。
  *
  * 存储：应用私有目录下的 wc_bridge_downloads.json（{items:[...]}）。

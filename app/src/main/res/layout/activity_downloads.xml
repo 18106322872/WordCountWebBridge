@@ -17,12 +17,16 @@
             android:id="@+id/btn_back"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="返回" />
+            android:text="返回"
+            android:textColor="@color/brand"
+            android:background="@drawable/btn_blue_border"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="下载"
+            android:text="查看已导出文件"
             android:textSize="18sp"
             android:textStyle="bold"
             android:layout_marginStart="12dp" />
@@ -33,7 +37,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:gravity="center"
-        android:text="还没有下载的文件"
+        android:text="还没有导出的文件"
         android:textSize="14sp"
         android:textColor="#888888"
         android:visibility="gone" />

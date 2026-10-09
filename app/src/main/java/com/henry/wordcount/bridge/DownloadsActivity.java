@@ -68,12 +68,16 @@ public class DownloadsActivity extends Activity {
             Downloads.Item it = getItem(position);
             TextView tvName = convertView.findViewById(R.id.tv_name);
             TextView tvMeta = convertView.findViewById(R.id.tv_meta);
+            Button btnOpen = convertView.findViewById(R.id.btn_open);
             Button btnDel = convertView.findViewById(R.id.btn_del);
 
             tvName.setText(it.name);
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA);
             String meta = sdf.format(new Date(it.time)) + "  " + formatSize(it.size);
             tvMeta.setText(meta);
+
+            // v1.1.11：显式「打开」按钮，直接拉起系统查看器查看 PDF
+            btnOpen.setOnClickListener(v -> Downloads.open(DownloadsActivity.this, it));
 
             btnDel.setOnClickListener(v -> {
                 // 删除时按磁盘最新顺序定位（read 已按时间倒序，与列表一致）

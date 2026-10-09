@@ -10,8 +10,8 @@ android {
         applicationId "com.henry.wordcount.bridge"
         minSdk 21
         targetSdk 34
-        versionCode 18
-        versionName "1.1.10"
+        versionCode 19
+        versionName "1.1.11"
     }
 
     buildTypes {

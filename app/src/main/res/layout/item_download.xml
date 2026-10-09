@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- v1.1.10：下载列表单行：文件名 + 时间/大小，右侧删除按钮 -->
+<!-- v1.1.11：下载列表单行：文件名 + 时间/大小；右侧「打开」「删除」两个按钮（蓝色边框样式）。
+     打开：直接拉起系统查看器查看 PDF；删除：同步删掉底层文件。 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:orientation="horizontal"
     android:layout_width="match_parent"
@@ -29,11 +30,35 @@
             android:layout_marginTop="2dp" />
     </LinearLayout>
 
-    <Button
-        android:id="@+id/btn_del"
+    <LinearLayout
+        android:orientation="horizontal"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="删除"
-        android:layout_marginStart="8dp" />
+        android:gravity="center_vertical">
+
+        <Button
+            android:id="@+id/btn_open"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="打开"
+            android:textSize="13sp"
+            android:textColor="@color/brand"
+            android:background="@drawable/btn_blue_border"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp" />
+
+        <Button
+            android:id="@+id/btn_del"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="删除"
+            android:textSize="13sp"
+            android:textColor="@color/brand"
+            android:background="@drawable/btn_blue_border"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:layout_marginStart="8dp" />
+
+    </LinearLayout>
 
 </LinearLayout>
