@@ -49,4 +49,17 @@
 
     <!-- v1.1.6：半透明版本悬浮已移除（用户反馈看不清）；版本号改在设置页标题下显示 -->
 
+    <!-- v1.1.10：右下角「下载」悬浮按钮，进入 App 内下载管理页（查看/删除导出文件） -->
+    <Button
+        android:id="@+id/btn_downloads"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="16dp"
+        android:minWidth="0dp"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:text="下载"
+        android:textSize="14sp" />
+
 </FrameLayout>

@@ -28,6 +28,12 @@
             </intent-filter>
         </activity>
 
+        <!-- v1.1.10：下载管理页（查看 / 删除桥接导出的文件） -->
+        <activity
+            android:name=".DownloadsActivity"
+            android:exported="false"
+            android:label="下载" />
+
         <!-- 文件接收：从微信/千牛「用其他应用打开」进来。
              v1.1.0：singleTask + configChanges —— 多次分享复用同一个 Activity/WebView，
              新文件追加到同一个网页的新行（对齐手机版程序的同页累加体验）；

@@ -185,6 +185,10 @@ public class BridgeActivity extends Activity {
         findViewById(R.id.btn_settings).setOnClickListener(v ->
                 startActivity(new Intent(this, SettingsActivity.class)));
 
+        // v1.1.10：右下角「下载」悬浮按钮，进入 App 内下载管理页（查看/删除导出文件）
+        findViewById(R.id.btn_downloads).setOnClickListener(v ->
+                startActivity(new Intent(this, DownloadsActivity.class)));
+
         handleIntent(getIntent());
     }
 
@@ -380,15 +384,19 @@ public class BridgeActivity extends Activity {
          *  （实测「导出中…」转一圈恢复，什么都没发生）。网页端 v1.3.9 起在检测到本接口时
          *  改走 saveFile(文件名, base64)，App 落盘后 toast 提示位置。
          *  Android 10+ 走 MediaStore.Downloads（无需存储权限）；旧版本落到应用专属
-         *  外部目录 Download/（同样免权限），toast 里带完整路径。 */
+         *  外部目录 Download/（同样免权限），toast 里带完整路径。
+         *  v1.1.10：落盘后登记到「下载」清单并自动打开，免得用户再到文件管理器翻找。 */
         @JavascriptInterface
         public void saveFile(String name, String base64) {
             if (name == null || name.isEmpty() || base64 == null || base64.isEmpty()) return;
             runOnUiThread(() -> {
-                String where;
                 try {
                     byte[] data = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
                     String safeName = name.replaceAll("[\\\\/:*?\"<>|]", "_");
+                    String where;
+                    String uriStr = "";
+                    String pathStr = "";
+                    long size = data.length;
                     if (Build.VERSION.SDK_INT >= 29) {
                         android.content.ContentValues cv = new android.content.ContentValues();
                         cv.put(android.provider.MediaStore.Downloads.DISPLAY_NAME, safeName);
@@ -401,6 +409,7 @@ public class BridgeActivity extends Activity {
                         os.write(data);
                         os.flush();
                         os.close();
+                        uriStr = uri.toString();
                         where = "下载/" + safeName;
                     } else {
                         File dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
@@ -410,11 +419,24 @@ public class BridgeActivity extends Activity {
                         fos.write(data);
                         fos.flush();
                         fos.close();
+                        pathStr = f.getAbsolutePath();
                         where = f.getAbsolutePath();
                     }
+                    // v1.1.10：登记到「下载」列表，并下载完成后自动打开
+                    Downloads.record(BridgeActivity.this, safeName, uriStr, pathStr,
+                            "application/pdf", size);
                     Toast.makeText(BridgeActivity.this, "已导出：" + where, Toast.LENGTH_LONG).show();
+                    Downloads.Item item = new Downloads.Item();
+                    item.name = safeName;
+                    item.uri = uriStr;
+                    item.path = pathStr;
+                    item.mime = "application/pdf";
+                    item.size = size;
+                    item.time = System.currentTimeMillis();
+                    Downloads.open(BridgeActivity.this, item);
                 } catch (Throwable t) {
-                    Toast.makeText(BridgeActivity.this, "导出保存失败：" + t.getMessage(), Toast.LENGTH_LONG).show();
+                    Toast.makeText(BridgeActivity.this, "导出保存失败：" + t.getMessage(),
+                            Toast.LENGTH_LONG).show();
                 }
             });
         }
